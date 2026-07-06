@@ -10,8 +10,6 @@ const client = new Client({
 });
 
 const PREFIX = ".";
-
-// Gönderdiğin etiketten sadece sayıları ayıklayıp ID olarak tanımlıyoruz
 const OWNER_ID = "1523659172904960030".replace(/[^0-9]/g, ""); 
 
 // Veritabanı Dosyası İşlemleri
@@ -54,6 +52,23 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
     const userId = message.author.id;
+
+    // 0. .yardım KOMUTU
+    if (command === 'yardım' || command === 'yardim' || command === 'help') {
+        const embed = new EmbedBuilder()
+            .setTitle("📜 Uygarlık Botu Komut Listesi")
+            .setColor("#00AAFF")
+            .setDescription(`Botun tüm komutları ve kullanımları aşağıda listelenmiştir. Prefix: \`${PREFIX}\``)
+            .addFields(
+                { name: "🏛️ Genel Komutlar", value: `\`${PREFIX}uygarlıkkur [isim]\` - Kendi uygarlığınızı kurarsınız.\n\`${PREFIX}profil\` - Uygarlığınızı, askerlerinizi ve binalarınızı incelersiniz.\n\`${PREFIX}bal\` - Hazine dairesindeki toplam paranızı gösterir.` },
+                { name: "⚔️ Askeri ve İnşaat", value: `\`${PREFIX}askeral [miktar]\` - Tanesi 10 🪙 değerinden orduya asker katarsınız.\n\`${PREFIX}inşaaet [kule/kale/sur]\` - Paranızı kullanarak savunma yapıları inşa edersiniz.\n*(Kule: 50K, Kale: 100K, Sur: 250K)*` },
+                { name: "👑 Kurucu (Owner) Komutları", value: `\`${PREFIX}hazinekle [miktar] [@kullanıcı]\` - Belirtilen hesaba para ekler.\n\`${PREFIX}hazineçıkar [miktar] [@kullanıcı]\` - Belirtilen hesaptan para eksiltir.` }
+            )
+            .setFooter({ text: `${message.author.username} tarafından istendi.`, iconURL: message.author.displayAvatarURL() })
+            .setTimestamp();
+            
+        return message.reply({ embeds: [embed] });
+    }
 
     // 1. .profil KOMUTU
     if (command === 'profil') {
@@ -166,4 +181,5 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-client.login('BOTUNUN_TOKENI'); // Buraya kendi botunun tokenini yapıştıracaksın!
+client.login('BOTUNUN_TOKENI'); 
+
