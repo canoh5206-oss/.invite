@@ -1,7 +1,7 @@
 {
-  "name": "rp-lig-botu",
+  "name": "rp-lig-ve-kayit-botu",
   "version": "1.0.0",
-  "description": "Discord RP Lig Değer Verme Botu",
+  "description": "Discord RP Lig Değer Verme ve Butonlu Kayıt Botu",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
