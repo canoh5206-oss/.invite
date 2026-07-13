@@ -18,12 +18,13 @@ const db = new PGClient({
 
 // --- DEĞER VERME SİSTEMİ ID'LERİ ---
 const DEGER_ROL_ID = "1522708103169048606";
-const DEGER_KANAL_ID = "1526234898032234639";
+const DEGER_YAZILACAK_KANAL = "1523362516640600285"; // Komutun yazılacağı kanal
+const DEGER_BILDIRIM_KANAL = "1526234898032234639";  // Bildirimin (Log) gideceği kanal
 
 // --- KAYIT SİSTEMİ ID'LERİ ---
 const KAYIT_YETKILI_ROL = "1522708151047164065";
 const KAYIT_MOD_KANAL = "1522291367533871276";
-const HOSGELDIN_KANAL = "1522939056760033362"; // SOHBET / MERHABA KANALI
+const HOSGELDIN_KANAL = "1522939056760033362"; 
 const KAYITSIZ_ROL = "1522698758008078436";
 
 // Buton Rolleri
@@ -105,18 +106,20 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // --- SİSTEM 2: DEĞER VERME KOMUTU ---
-    if (command === 'degerver') {
-        if (message.channel.id !== DEGER_KANAL_ID) {
-            return message.reply(`❌ Bu komut sadece <#${DEGER_KANAL_ID}> kanalında kullanılabilir!`).then(msg => setTimeout(() => msg.delete().catch(e=>{}), 5000));
+    // --- SİSTEM 2: DEĞER EKLEME KOMUTU (.degerekle) ---
+    if (command === 'degerekle') {
+        // Kanal Kontrolü (Komut sadece DEGER_YAZILACAK_KANAL'da çalışır)
+        if (message.channel.id !== DEGER_YAZILACAK_KANAL) {
+            return message.reply(`❌ Bu komut sadece <#${DEGER_YAZILACAK_KANAL}> kanalında kullanılabilir!`).then(msg => setTimeout(() => msg.delete().catch(e=>{}), 5000));
         }
+        // Rol Kontrolü
         if (!message.member.roles.cache.has(DEGER_ROL_ID)) {
             return message.reply(`❌ Bu komutu kullanmak için gerekli role sahip değilsin.`).then(msg => setTimeout(() => msg.delete().catch(e=>{}), 5000));
         }
 
         const targetMember = message.mentions.members.first();
         const eklenecekMetin = args[1];
-        if (!targetMember || !eklenecekMetin) return message.reply('❌ Örnek: `.degerver @kullanici 1m`');
+        if (!targetMember || !eklenecekMetin) return message.reply('❌ Örnek: `.degerekle @kullanici 1m`');
 
         const userId = targetMember.id;
         const eklenecekSayi = metniSayiyaCevir(eklenecekMetin);
@@ -134,14 +137,23 @@ client.on('messageCreate', async (message) => {
                 await db.query('INSERT INTO oyuncular (user_id, isim, mevki, bayrak, deger) VALUES ($1, $2, $3, $4, $5)', [userId, "Osimhen", "ST", "🇳🇬", yeniSayi]);
             }
 
-            const embed = new EmbedBuilder()
-                .setTitle('⚽ RP LİGİ - PİYASA DEĞERİ GÜNCELLEME')
-                .setColor(0x00FF00)
-                .addFields(
-                    { name: 'Oyuncu', value: `Osimhen | ST | 🇳🇬`, inline: false },
-                    { name: 'Durum', value: `📈 ${durumMesaji}`, inline: false }
-                );
-            await message.channel.send({ embeds: [embed] });
+            // Komutun yazıldığı kanala onay mesajı verir ve 3 saniye sonra siler (kanal temizliği için)
+            await message.reply('✅ Değer başarıyla eklendi ve bildirildi!').then(msg => setTimeout(() => { msg.delete().catch(e=>{}); message.delete().catch(e=>{}); }, 3000));
+
+            // BİLDİRİM KANALINA LOG GÖNDERİR
+            const logChannel = client.channels.cache.get(DEGER_BILDIRIM_KANAL);
+            if (logChannel) {
+                const embed = new EmbedBuilder()
+                    .setTitle('⚽ RP LİGİ - PİYASA DEĞERİ GÜNCELLEME')
+                    .setColor(0x00FF00)
+                    .addFields(
+                        { name: 'Oyuncu', value: `${targetMember} (Osimhen | ST | 🇳🇬)`, inline: false },
+                        { name: 'Durum', value: `📈 ${durumMesaji}`, inline: false }
+                    )
+                    .setFooter({ text: `Yetkili: ${message.author.displayName}` })
+                    .setTimestamp();
+                await logChannel.send({ embeds: [embed] });
+            }
         } catch (err) { console.error(err); }
     }
 
@@ -210,7 +222,6 @@ client.on('messageCreate', async (message) => {
                 await targetMember.roles.add(verilecekRoller);
                 await targetMember.roles.remove(KAYITSIZ_ROL);
 
-                // 1. Kayıt Mod Kanalındaki mesajı başarıyla günceller
                 const basariliEmbed = new EmbedBuilder()
                     .setTitle('✅ Kayıt Tamamlandı!')
                     .setDescription(`${targetMember} kullanıcısı başarıyla kaydedildi ve rolleri tanımlandı.`)
@@ -218,7 +229,6 @@ client.on('messageCreate', async (message) => {
 
                 await response.edit({ embeds: [basariliEmbed], components: [] });
 
-                // 2. SOHBET KANALINA (MERHABA SÖYLEYİN) MESAJI GÖNDERİR
                 const chatChannel = client.channels.cache.get(HOSGELDIN_KANAL);
                 if (chatChannel) {
                     const sohbetEmbed = new EmbedBuilder()
@@ -241,4 +251,4 @@ client.on('messageCreate', async (message) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-            
+                
