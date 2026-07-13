@@ -2,13 +2,16 @@
   "name": "rp-lig-ve-kayit-botu",
   "version": "1.0.0",
   "description": "Discord RP Lig Değer Verme ve Butonlu Kayıt Botu",
-"main": "bot.js",
-"scripts": {
-  "start": "node bot.js"
-}
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
   "dependencies": {
     "discord.js": "^14.14.1",
     "dotenv": "^16.4.5",
     "pg": "^8.11.3"
+  },
+  "engines": {
+    "node": "20.x"
   }
 }
