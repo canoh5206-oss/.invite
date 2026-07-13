@@ -1,5 +1,7 @@
+
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
-const fs = require('fs');
+const { Client: PGClient } = require('pg');
+require('dotenv').config();
 
 const client = new Client({
     intents: [
@@ -9,177 +11,128 @@ const client = new Client({
     ]
 });
 
-const PREFIX = ".";
-const OWNER_ID = "1523659172904960030".replace(/[^0-9]/g, ""); 
+// Veri tabanı bağlantısı
+const db = new PGClient({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : false
+});
 
-// Veritabanı Dosyası İşlemleri
-const VERI_DOSYASI = './ekonomi.json';
-if (!fs.existsSync(VERI_DOSYASI)) {
-    fs.writeFileSync(VERI_DOSYASI, JSON.stringify({}));
+// Sabit ID Tanımlamaları
+const YETKILI_ROL_ID = "1522708103169048606";
+const IZINLI_KANAL_ID = "1526234898032234639";
+
+function metniSayiyaCevir(metin) {
+    metin = metin.toLowerCase().trim();
+    const sayiKismi = metin.match(/[-+]?\d*\.\d+|\d+/);
+    if (!sayiKismi) return 0;
+    
+    const val = parseFloat(sayiKismi[0]);
+    if (metin.includes('m')) return Math.floor(val * 1000000);
+    if (metin.includes('k')) return Math.floor(val * 1000);
+    return Math.floor(val);
 }
 
-function veriOku() {
-    return JSON.parse(fs.readFileSync(VERI_DOSYASI, 'utf8'));
-}
-
-function veriYaz(data) {
-    fs.writeFileSync(VERI_DOSYASI, JSON.stringify(data, null, 2));
-}
-
-function profilGetir(userId) {
-    let veri = veriOku();
-    if (!veri[userId]) {
-        veri[userId] = {
-            uygarlik: "Bilinmeyen Uygarlık",
-            para: 1000, 
-            asker: 0,
-            kale: 0,
-            kule: 0,
-            sur: 0
-        };
-        veriYaz(veri);
+function sayiyiMetneCevir(sayi) {
+    if (sayi >= 1000000) {
+        const val = sayi / 1000000;
+        return Number.isInteger(val) ? `${val}m` : `${val.toFixed(1)}m`;
+    } else if (sayi >= 1000) {
+        const val = sayi / 1000;
+        return Number.isInteger(val) ? `${val}k` : `${val.toFixed(1)}k`;
     }
-    return veri[userId];
+    return sayi.toString();
 }
 
-client.on('ready', () => {
-    console.log(`${client.user.tag} başarıyla aktif oldu!`);
+client.once('ready', async () => {
+    console.log(`${client.user.tag} aktif ve Railway'e hazır!`);
+    try {
+        await db.connect();
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS oyuncular (
+                user_id VARCHAR(50) PRIMARY KEY,
+                isim VARCHAR(100),
+                mevki VARCHAR(20),
+                bayrak VARCHAR(20),
+                deger INT DEFAULT 0
+            )
+        `);
+        console.log("Veri tabanı tablosu hazır.");
+    } catch (err) {
+        console.error("Veri tabanı bağlantı hatası:", err);
+    }
 });
 
 client.on('messageCreate', async (message) => {
-    if (message.author.bot || !message.content.startsWith(PREFIX)) return;
+    if (message.author.bot || !message.content.startsWith('.')) return;
 
-    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
+    const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
-    const userId = message.author.id;
 
-    // 0. .yardım KOMUTU
-    if (command === 'yardım' || command === 'yardim' || command === 'help') {
-        const embed = new EmbedBuilder()
-            .setTitle("📜 Uygarlık Botu Komut Listesi")
-            .setColor("#00AAFF")
-            .setDescription(`Botun tüm komutları ve kullanımları aşağıda listelenmiştir. Prefix: \`${PREFIX}\``)
-            .addFields(
-                { name: "🏛️ Genel Komutlar", value: `\`${PREFIX}uygarlıkkur [isim]\` - Kendi uygarlığınızı kurarsınız.\n\`${PREFIX}profil\` - Uygarlığınızı, askerlerinizi ve binalarınızı incelersiniz.\n\`${PREFIX}bal\` - Hazine dairesindeki toplam paranızı gösterir.` },
-                { name: "⚔️ Askeri ve İnşaat", value: `\`${PREFIX}askeral [miktar]\` - Tanesi 10 🪙 değerinden orduya asker katarsınız.\n\`${PREFIX}inşaaet [kule/kale/sur]\` - Paranızı kullanarak savunma yapıları inşa edersiniz.\n*(Kule: 50K, Kale: 100K, Sur: 250K)*` },
-                { name: "👑 Kurucu (Owner) Komutları", value: `\`${PREFIX}hazinekle [miktar] [@kullanıcı]\` - Belirtilen hesaba para ekler.\n\`${PREFIX}hazineçıkar [miktar] [@kullanıcı]\` - Belirtilen hesaptan para eksiltir.` }
-            )
-            .setFooter({ text: `${message.author.username} tarafından istendi.`, iconURL: message.author.displayAvatarURL() })
-            .setTimestamp();
+    if (command === 'degerver') {
+        // 1. Kanal Kontrolü
+        if (message.channel.id !== IZINLI_KANAL_ID) {
+            return message.reply(`❌ Bu komut sadece <#${IZINLI_KANAL_ID}> kanalında kullanılabilir!`)
+                .then(msg => setTimeout(() => msg.delete().catch(e => {}), 5000)); // 5 saniye sonra uyarıyı siler
+        }
+
+        // 2. Rol Yetki Kontrolü
+        if (!message.member.roles.cache.has(YETKILI_ROL_ID)) {
+            return message.reply(`❌ Bu komutu kullanmak için <@&${YETKILI_ROL_ID}> rolüne sahip olmalısın!`)
+                .then(msg => setTimeout(() => msg.delete().catch(e => {}), 5000));
+        }
+
+        const targetMember = message.mentions.members.first();
+        const eklenecekMetin = args[1];
+
+        if (!targetMember || !eklenecekMetin) {
+            return message.reply('❌ Hatalı Kullanım! Örnek: `.degerver @kullanici 1m`');
+        }
+
+        const userId = targetMember.id;
+        const eklenecekSayi = metniSayiyaCevir(eklenecekMetin);
+
+        const oyuncuAdi = "Osimhen";
+        const mevki = "ST";
+        const bayrak = "🇳🇬";
+
+        try {
+            const res = await db.query('SELECT * FROM oyuncular WHERE user_id = $1', [userId]);
             
-        return message.reply({ embeds: [embed] });
-    }
+            let yeniSayi = eklenecekSayi;
+            let durumMesaji = `İlk Değer Tanımlandı: **${eklenecekMetin}**`;
+            let eskiMetin = "0m";
 
-    // 1. .profil KOMUTU
-    if (command === 'profil') {
-        let profil = profilGetir(userId);
-        const embed = new EmbedBuilder()
-            .setTitle(`🏰 ${message.author.username} - Profil Kartı`)
-            .setColor('#FFA500')
-            .addFields(
-                { name: '🏛️ Uygarlık', value: `${profil.uygarlik}`, inline: false },
-                { name: '💰 Hazine (Para)', value: `${profil.para.toLocaleString()} 🪙`, inline: true },
-                { name: '⚔️ Asker Sayısı', value: `${profil.asker.toLocaleString()} 🪖`, inline: true },
-                { name: '🏰 Yapılar', value: `🗼 Kule: ${profil.kule}\n🏯 Kale: ${profil.kale}\n🧱 Sur: ${profil.sur}`, inline: false }
-            );
-        return message.reply({ embeds: [embed] });
-    }
+            if (res.rows.length > 0) {
+                const mevcutSayi = res.rows[0].deger;
+                eskiMetin = sayiyiMetneCevir(mevcutSayi);
+                yeniSayi = mevcutSayi + eklenecekSayi;
+                
+                await db.query('UPDATE oyuncular SET deger = $1 WHERE user_id = $2', [yeniSayi, userId]);
+                durumMesaji = `Değer Eklendi! (${eskiMetin} + {eklenecekMetin} ➡️ **${sayiyiMetneCevir(yeniSayi)}**)`;
+            } else {
+                await db.query(
+                    'INSERT INTO oyuncular (user_id, isim, mevki, bayrak, deger) VALUES ($1, $2, $3, $4, $5)',
+                    [userId, oyuncuAdi, mevki, bayrak, yeniSayi]
+                );
+            }
 
-    // .uygarlıkkur KOMUTU
-    if (command === 'uygarlıkkur' || command === 'uygarlikkur') {
-        let isim = args.join(" ");
-        if (!isim) return message.reply("Lütfen bir uygarlık ismi yazın! Örn: `.uygarlıkkur Roma`");
-        let veri = veriOku();
-        profilGetir(userId);
-        veri[userId].uygarlik = isim;
-        veriYaz(veri);
-        return message.reply(`🎉 Uygarlığınızın adı başarıyla **${isim}** olarak belirlendi!`);
-    }
+            const embed = new EmbedBuilder()
+                .setTitle('⚽ RP LİGİ - PİYASA DEĞERİ ARTIŞI')
+                .setColor(0x00FF00)
+                .addFields(
+                    { name: 'Oyuncu', value: `${oyuncuAdi} | ${mevki} | ${bayrak}`, inline: false },
+                    { name: 'İşlem Durumu', value: `📈 ${durumMesaji}`, inline: false }
+                )
+                .setFooter({ text: `Yetkili: ${message.author.displayName}` });
 
-    // 2. .bal KOMUTU
-    if (command === 'bal') {
-        let profil = profilGetir(userId);
-        return message.reply(`💰 Mevcut Hazneniz: **${profil.para.toLocaleString()}** 🪙`);
-    }
+            await message.channel.send({ embeds: [embed] });
 
-    // 3. .hazinekle KOMUTU (Owner Özel)
-    if (command === 'hazinekle') {
-        if (userId !== OWNER_ID) return message.reply("❌ Bu komutu sadece bot sahibi kullanabilir!");
-        let miktar = parseInt(args[0]);
-        let hedef = message.mentions.users.first() || message.author;
-        
-        if (!miktar || isNaN(miktar)) return message.reply("❌ Lütfen eklenecek geçerli bir para miktarı yazın! Örn: `.hazinekle 5000`");
-        
-        let veri = veriOku();
-        profilGetir(hedef.id);
-        veri[hedef.id].para += miktar;
-        veriYaz(veri);
-        
-        return message.reply(`✅ ${hedef.username} kullanıcısının hazinesine **${miktar.toLocaleString()}** 🪙 eklendi.`);
-    }
-
-    // 4. .hazineçıkar KOMUTU (Owner Özel)
-    if (command === 'hazineçıkar' || command === 'hazinecikar') {
-        if (userId !== OWNER_ID) return message.reply("❌ Bu komutu sadece bot sahibi kullanabilir!");
-        let miktar = parseInt(args[0]);
-        let hedef = message.mentions.users.first() || message.author;
-        
-        if (!miktar || isNaN(miktar)) return message.reply("❌ Lütfen çıkarılacak geçerli bir para miktarı yazın! Örn: `.hazineçıkar 2000`");
-        
-        let veri = veriOku();
-        profilGetir(hedef.id);
-        if(veri[hedef.id].para < miktar) miktar = veri[hedef.id].para; 
-        
-        veri[hedef.id].para -= miktar;
-        veriYaz(veri);
-        
-        return message.reply(`📉 ${hedef.username} kullanıcısının hazinesinden **${miktar.toLocaleString()}** 🪙 çıkarıldı.`);
-    }
-
-    // 5. .askeral KOMUTU
-    if (command === 'askeral') {
-        let miktar = parseInt(args[0]);
-        if (!miktar || isNaN(miktar) || miktar <= 0) return message.reply("❌ Lütfen almak istediğiniz asker miktarını girin! Örn: `.askeral 50`");
-        
-        let toplamMaliyet = miktar * 10;
-        let veri = veriOku();
-        let profil = profilGetir(userId);
-
-        if (profil.para < toplamMaliyet) {
-            return message.reply(`❌ Yetersiz altın! ${miktar} asker için **${toplamMaliyet}** 🪙 gerekiyor. Sende olan: **${profil.para}** 🪙`);
+        } catch (err) {
+            console.error(err);
+            await message.reply('❌ Veri tabanına kaydedilirken bir hata oluştu.');
         }
-
-        veri[userId].para -= toplamMaliyet;
-        veri[userId].asker += miktar;
-        veriYaz(veri);
-
-        return message.reply(`⚔️ Başarıyla Orduya **${miktar}** asker katıldı! Harcanan: **${toplamMaliyet}** 🪙.`);
-    }
-
-    // 6. .inşaaet KOMUTU
-    if (command === 'inşaaet' || command === 'insaaet') {
-        let yapi = args[0]?.toLowerCase();
-        if (!yapi || !['kule', 'kale', 'sur'].includes(yapi)) {
-            return message.reply("❌ Lütfen ne inşa etmek istediğinizi belirtin!\n⚙️ Seçenekler: `.inşaaet kule` (50K), `.inşaaet kale` (100K), `.inşaaet sur` (250K)");
-        }
-
-        let maliyetler = { kule: 50000, kale: 100000, sur: 250000 };
-        let maliyet = maliyetler[yapi];
-        
-        let veri = veriOku();
-        let profil = profilGetir(userId);
-
-        if (profil.para < maliyet) {
-            return message.reply(`❌ Bu yapıyı inşa etmek için yeterli paranız yok! Gerekli: **${maliyet.toLocaleString()}** 🪙`);
-        }
-
-        veri[userId].para -= maliyet;
-        veri[userId][yapi] += 1;
-        veriYaz(veri);
-
-        return message.reply(`🧱 Tebrikler! Başarıyla 1 adet **${yapi.toUpperCase()}** inşa ettiniz. Harcanan: **${maliyet.toLocaleString()}** 🪙.`);
     }
 });
 
-client.login('BOTUNUN_TOKENI'); 
-
+client.login(process.env.DISCORD_TOKEN);
+                                        
