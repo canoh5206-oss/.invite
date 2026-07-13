@@ -23,7 +23,7 @@ const DEGER_KANAL_ID = "1526234898032234639";
 // --- KAYIT SİSTEMİ ID'LERİ ---
 const KAYIT_YETKILI_ROL = "1522708151047164065";
 const KAYIT_MOD_KANAL = "1522291367533871276";
-const HOSGELDIN_KANAL = "1522939056760033362";
+const HOSGELDIN_KANAL = "1522939056760033362"; // SOHBET / MERHABA KANALI
 const KAYITSIZ_ROL = "1522698758008078436";
 
 // Buton Rolleri
@@ -190,27 +190,47 @@ client.on('messageCreate', async (message) => {
 
             await i.deferUpdate();
             let verilecekRoller = [];
+            let rolGrupIsmi = "Üye";
 
             if (i.customId === 'btn_uye') {
                 verilecekRoller.push(ROL_UYE);
+                rolGrupIsmi = "Üye";
             } else if (i.customId === 'btn_futbol') {
                 verilecekRoller.push(ROL_FUTBOL_1, ROL_FUTBOL_2);
+                rolGrupIsmi = "Futbolcu";
             } else if (i.customId === 'btn_baskan') {
                 verilecekRoller.push(ROL_BASKAN, ROL_FUTBOL_1);
+                rolGrupIsmi = "Başkan";
             } else if (i.customId === 'btn_td') {
                 verilecekRoller.push(ROL_TEKNIK_DIREKTOR, ROL_FUTBOL_1);
+                rolGrupIsmi = "Teknik Direktör";
             }
 
             try {
                 await targetMember.roles.add(verilecekRoller);
                 await targetMember.roles.remove(KAYITSIZ_ROL);
 
+                // 1. Kayıt Mod Kanalındaki mesajı başarıyla günceller
                 const basariliEmbed = new EmbedBuilder()
                     .setTitle('✅ Kayıt Tamamlandı!')
                     .setDescription(`${targetMember} kullanıcısı başarıyla kaydedildi ve rolleri tanımlandı.`)
                     .setColor(0x2ecc71);
 
                 await response.edit({ embeds: [basariliEmbed], components: [] });
+
+                // 2. SOHBET KANALINA (MERHABA SÖYLEYİN) MESAJI GÖNDERİR
+                const chatChannel = client.channels.cache.get(HOSGELDIN_KANAL);
+                if (chatChannel) {
+                    const sohbetEmbed = new EmbedBuilder()
+                        .setTitle(`🎉 Aramıza Yeni Biri Katıldı!`)
+                        .setDescription(`Aramıza hoş geldin **${yeniIsim}**! Sunucumuzda **${rolGrupIsmi}** olarak görev alacak. \n\nHerkes merhaba desin! 👋`)
+                        .setThumbnail(targetMember.user.displayAvatarURL({ dynamic: true }))
+                        .setColor(0x2ecc71)
+                        .setTimestamp();
+
+                    await chatChannel.send({ content: `🎉 ${targetMember} başarıyla kayıt edildi!`, embeds: [sohbetEmbed] });
+                }
+
             } catch (err) {
                 console.error(err);
                 await message.channel.send("❌ Rol yönetiminde bir hata oluştu (Botun rolü yetersiz olabilir).");
@@ -221,5 +241,4 @@ client.on('messageCreate', async (message) => {
 });
 
 client.login(process.env.DISCORD_TOKEN);
-        
-    
+            
