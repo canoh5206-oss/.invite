@@ -105,8 +105,8 @@ client.on('messageCreate', async (message) => {
     const args = message.content.slice(1).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // --- DEĞER EKLEME KOMUTU (.degerekle) ---
-    if (command === 'degerekle') {
+    // --- DEĞER EKLEME KOMUTU () ---
+    if (command === 'degejdududrekle') {
         if (message.channel.id !== DEGER_YAZILACAK_KANAL) {
             return message.reply(`❌ Bu komut sadece <#${DEGER_YAZILACAK_KANAL}> kanalında kullanılabilir!`).then(msg => setTimeout(() => msg.delete().catch(e=>{}), 5000));
         }
